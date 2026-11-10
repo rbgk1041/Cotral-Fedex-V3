@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>코트랄(COTRAL) 출고정보 자동화 시스템 (v8 Pro)</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <!-- PDF.js 라이브러리 (CDN) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+  <!-- SheetJS (XLSX.js) 라이브러리 (CDN) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.5/xlsx.full.min.js"></script>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'Noto Sans KR', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#f0f7ff',
+              100: '#e0effe',
+              200: '#b9ddfd',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              800: '#1e40af',
+              900: '#1e3a8a',
+            },
+            fedex: {
+              purple: '#4D148C',
+              orange: '#FF6200',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    .fade-in { animation: fadeIn 0.25s ease-out forwards; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col antialiased">
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm pointer-events-none"></div>
+
+  <!-- Top Header Navigation -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-brand-500/20">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-lg font-bold text-slate-900 tracking-tight leading-tight">코트랄 출고정보 자동화 시스템</h1>
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-brand-50 text-brand-700 border border-brand-200">v8.0 Pro</span>
+          </div>
+          <p class="text-xs text-slate-500">OTOS Customs Invoice 엑셀 & FedEx PDF 청구서 대조 정산 플랫폼</p>
+        </div>
+      </div>
+
+      <!-- Action & Server Status Badges -->
+      <div class="flex items-center gap-3">
+        <button id="toggle-gemini-btn" onclick="toggleGeminiModal()" class="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-indigo-200 bg-indigo-50/70 text-indigo-700 hover:bg-indigo-100 transition shadow-2xs">
+          <svg class="w-4 h-4 text-indigo-600" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 14.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm1.75-6.8a2.5 2.5 0 0 0-1.85-2.4 2.65 2.65 0 0 0-2.9 1.15.75.75 0 1 1-1.25-.82 4.15 4.15 0 0 1 4.54-1.8 3.94 3.94 0 0 1 2.91 3.79c0 1.48-.83 2.37-1.63 3.06-.55.48-1.07.93-1.07 1.82a.75.75 0 0 1-1.5 0c0-1.54.89-2.31 1.62-2.95.54-.47.88-.77.88-1.5a1.5 1.5 0 0 0-.75-1.35z"/>
+          </svg>
+          <span>제미나이 AI 서버 연동</span>
+          <span id="gemini-status-dot" class="w-2 h-2 rounded-full bg-slate-300"></span>
+        </button>
+        <button id="demo-load-btn" onclick="loadDemoDataset()" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition">
+          <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          샘플 데이터 체험
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+
+    <!-- Information Banner -->
+    <div class="bg-gradient-to-r from-blue-50 via-indigo-50 to-slate-50 border border-blue-100/80 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-2xs">
+      <div class="flex items-start gap-3">
+        <div class="p-2.5 rounded-xl bg-blue-500/10 text-brand-600 mt-0.5">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <div>
+          <h2 class="text-sm font-semibold text-slate-900">클라이언트 사이드 고속 대조 + 제미나이 AI 서버 지원</h2>
+          <p class="text-xs text-slate-600 mt-0.5 leading-relaxed">
+            엑셀과 PDF 파일은 브라우저 메모리 내에서 안전하게 즉시 파싱됩니다. 불일치 원인 심층 분석 및 영문 소명서 작성이 필요할 때 Google Gemini API 서버를 직접 연동할 수 있습니다.
+          </p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 text-xs font-medium text-slate-600 self-end md:self-auto bg-white/70 px-3 py-1.5 rounded-lg border border-slate-200/60">
+        <span class="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+        <span>보안 암호화 처리 (로컬 파싱)</span>
+      </div>
+    </div>
+
+    <!-- Drag & Drop Upload Section -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      
+      <!-- Excel Drop Card -->
+      <div id="excel-drop-area" class="relative group border-2 border-dashed border-slate-300 hover:border-brand-500 bg-white hover:bg-brand-50/20 rounded-2xl p-6 transition-all duration-200 flex flex-col justify-between shadow-xs">
+        <div>
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2.5">
+              <div class="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">
+                XLS
+              </div>
+              <div>
+                <h3 class="text-sm font-bold text-slate-900">1. OTOS 출고정보 엑셀 파일</h3>
+                <p class="text-xs text-slate-500">'.xlsx', '.xls' (Customs Invoice 시트)</p>
+              </div>
+            </div>
+            <span id="excel-count-badge" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">0개 선택됨</span>
+          </div>
+
+          <div class="text-center py-6 border border-slate-100 rounded-xl bg-slate-50/50 mb-3 group-hover:bg-white transition">
+            <svg class="mx-auto h-10 w-10 text-slate-400 group-hover:text-brand-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            <p class="mt-2 text-xs font-medium text-slate-700">엑셀 파일을 드래그하여 놓거나 선택하세요</p>
+            <p class="text-[11px] text-slate-400 mt-1">파일명에서 출고일(YYMMDD/YYYYMMDD)을 자동 파싱합니다</p>
+            <input type="file" id="excel-file-input" accept=".xlsx, .xls" multiple class="hidden">
+            <button type="button" onclick="document.getElementById('excel-file-input').click()" class="mt-3 inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-brand-600 text-white hover:bg-brand-700 transition shadow-xs">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+              파일 선택
+            </button>
+          </div>
+        </div>
+
+        <!-- File List -->
+        <ul id="excel-file-list" class="space-y-1.5 max-h-40 overflow-y-auto pr-1 empty:hidden"></ul>
+      </div>
+
+      <!-- FedEx PDF Drop Card -->
+      <div id="pdf-drop-area" class="relative group border-2 border-dashed border-slate-300 hover:border-fedex-purple bg-white hover:bg-purple-50/20 rounded-2xl p-6 transition-all duration-200 flex flex-col justify-between shadow-xs">
+        <div>
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2.5">
+              <div class="w-9 h-9 rounded-lg bg-purple-100 text-fedex-purple flex items-center justify-center font-bold text-xs">
+                PDF
+              </div>
+              <div>
+                <h3 class="text-sm font-bold text-slate-900">2. FedEx 공식 PDF 청구서</h3>
+                <p class="text-xs text-slate-500">'.pdf' (COTRAL 수취인 운임 인보이스)</p>
+              </div>
+            </div>
+            <span id="pdf-count-badge" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">0개 선택됨</span>
+          </div>
+
+          <div class="text-center py-6 border border-slate-100 rounded-xl bg-slate-50/50 mb-3 group-hover:bg-white transition">
+            <svg class="mx-auto h-10 w-10 text-slate-400 group-hover:text-fedex-purple transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <p class="mt-2 text-xs font-medium text-slate-700">FedEx 인보이스 PDF 파일을 놓거나 선택하세요</p>
+            <p class="text-[11px] text-slate-400 mt-1">단일 박스 및 패키지 세부정보 멀티 박스를 모두 지원합니다</p>
+            <input type="file" id="pdf-file-input" accept=".pdf" multiple class="hidden">
+            <button type="button" onclick="document.getElementById('pdf-file-input').click()" class="mt-3 inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-indigo-700 text-white hover:bg-indigo-800 transition shadow-xs">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+              파일 선택
+            </button>
+          </div>
+        </div>
+
+        <!-- File List -->
+        <ul id="pdf-file-list" class="space-y-1.5 max-h-40 overflow-y-auto pr-1 empty:hidden"></ul>
+      </div>
+
+    </div>
+
+    <!-- Options and Start Action Bar -->
+    <div class="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs flex flex-col md:flex-row items-center justify-between gap-5">
+      <div class="w-full md:w-auto">
+        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">분석 모드 선택</label>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          
+          <label class="relative flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 hover:border-slate-300 cursor-pointer bg-slate-50/60 has-[:checked]:bg-brand-50 has-[:checked]:border-brand-500 has-[:checked]:text-brand-900 transition">
+            <input type="radio" id="option3" name="process-option" value="compare" checked class="text-brand-600 focus:ring-brand-500 w-4 h-4">
+            <div class="text-xs">
+              <span class="font-bold block">출고 vs FedEx 비교</span>
+              <span class="text-[11px] text-slate-500">날짜·크기·중량 3단 검증</span>
+            </div>
+          </label>
+
+          <label class="relative flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 hover:border-slate-300 cursor-pointer bg-slate-50/60 has-[:checked]:bg-brand-50 has-[:checked]:border-brand-500 has-[:checked]:text-brand-900 transition">
+            <input type="radio" id="option1" name="process-option" value="excel" class="text-brand-600 focus:ring-brand-500 w-4 h-4">
+            <div class="text-xs">
+              <span class="font-bold block">출고정보만 추출</span>
+              <span class="text-[11px] text-slate-500">OTOS 엑셀 PACKING 정보</span>
+            </div>
+          </label>
+
+          <label class="relative flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 hover:border-slate-300 cursor-pointer bg-slate-50/60 has-[:checked]:bg-brand-50 has-[:checked]:border-brand-500 has-[:checked]:text-brand-900 transition">
+            <input type="radio" id="option2" name="process-option" value="pdf" class="text-brand-600 focus:ring-brand-500 w-4 h-4">
+            <div class="text-xs">
+              <span class="font-bold block">FedEx 정보만 처리</span>
+              <span class="text-[11px] text-slate-500">청구 정격중량 및 규격 추출</span>
+            </div>
+          </label>
+
+        </div>
+      </div>
+
+      <div class="w-full md:w-auto flex flex-col sm:flex-row items-center gap-3">
+        <button id="reset-btn" onclick="resetAllFiles()" class="w-full sm:w-auto px-4 py-2.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition">
+          초기화
+        </button>
+        <button id="process-btn" onclick="startAnalysis()" class="w-full sm:w-auto min-w-[160px] inline-flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-brand-600 via-indigo-600 to-indigo-700 hover:from-brand-700 hover:to-indigo-800 rounded-xl shadow-md shadow-brand-600/25 transition-all transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>분석 시작하기</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Processing Loader Indicator -->
+    <div id="loader" class="hidden my-8 py-10 bg-white border border-slate-200 rounded-2xl text-center shadow-xs">
+      <div class="inline-block animate-spin rounded-full h-10 w-10 border-4 border-slate-200 border-t-brand-600 mb-3"></div>
+      <p class="text-sm font-semibold text-slate-800" id="loader-status-text">파일 파싱 및 대조 분석 중...</p>
+      <p class="text-xs text-slate-400 mt-1">대용량 PDF 문서 텍스트 추출 및 정밀 중량 계산을 수행하고 있습니다</p>
+    </div>
+
+    <!-- Results Section -->
+    <section id="results-area" class="hidden space-y-6 fade-in">
+      
+      <!-- KPI Stats Summary Cards -->
+      <div id="kpi-dashboard" class="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
+        <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
+          <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">총 검증 건수</p>
+          <div class="flex items-baseline gap-2 mt-1">
+            <span id="kpi-total" class="text-2xl font-extrabold text-slate-900">0</span>
+            <span class="text-xs text-slate-500">건</span>
+          </div>
+        </div>
+        <div class="bg-white border border-emerald-100 rounded-2xl p-4 shadow-2xs bg-emerald-50/30">
+          <p class="text-[11px] font-semibold uppercase tracking-wider text-emerald-600">완전 일치</p>
+          <div class="flex items-baseline gap-2 mt-1">
+            <span id="kpi-matched" class="text-2xl font-extrabold text-emerald-700">0</span>
+            <span class="text-xs text-emerald-600">건</span>
+          </div>
+        </div>
+        <div class="bg-white border border-rose-100 rounded-2xl p-4 shadow-2xs bg-rose-50/30">
+          <p class="text-[11px] font-semibold uppercase tracking-wider text-rose-600">불일치 감지</p>
+          <div class="flex items-baseline gap-2 mt-1">
+            <span id="kpi-mismatched" class="text-2xl font-extrabold text-rose-700">0</span>
+            <span class="text-xs text-rose-600">건</span>
+          </div>
+        </div>
+        <div class="bg-white border border-amber-100 rounded-2xl p-4 shadow-2xs bg-amber-50/30">
+          <p class="text-[11px] font-semibold uppercase tracking-wider text-amber-600">FedEx 누락</p>
+          <div class="flex items-baseline gap-2 mt-1">
+            <span id="kpi-missing" class="text-2xl font-extrabold text-amber-700">0</span>
+            <span class="text-xs text-amber-600">건</span>
+          </div>
+        </div>
+        <div class="col-span-2 lg:col-span-1 bg-white border border-indigo-100 rounded-2xl p-4 shadow-2xs bg-indigo-50/30">
+          <p class="text-[11px] font-semibold uppercase tracking-wider text-indigo-600">일치율 (정합도)</p>
+          <div class="flex items-baseline gap-2 mt-1">
+            <span id="kpi-rate" class="text-2xl font-extrabold text-indigo-700">0%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Table Toolbar (Filters + Exports + Gemini trigger) -->
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col lg:flex-row items-center justify-between gap-4">
+        
+        <!-- Search and Filter Buttons -->
+        <div class="w-full lg:w-auto flex flex-wrap items-center gap-2">
+          <div class="relative w-full sm:w-64">
+            <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            </span>
+            <input type="text" id="table-search" placeholder="송장번호, 날짜, 규격 검색..." oninput="filterTableData()" class="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500">
+          </div>
+
+          <div id="filter-tabs" class="flex items-center gap-1 bg-slate-100 p-1 rounded-lg text-xs">
+            <button onclick="setFilter('all')" id="tab-all" class="px-2.5 py-1 rounded-md font-semibold bg-white text-slate-900 shadow-2xs">전체</button>
+            <button onclick="setFilter('match')" id="tab-match" class="px-2.5 py-1 rounded-md font-medium text-slate-600 hover:text-slate-900">일치</button>
+            <button onclick="setFilter('mismatch')" id="tab-mismatch" class="px-2.5 py-1 rounded-md font-medium text-slate-600 hover:text-slate-900">불일치</button>
+          </div>
+        </div>
+
+        <!-- Right Side: Gemini AI Report button and Download Buttons -->
+        <div class="w-full lg:w-auto flex flex-wrap items-center justify-end gap-2">
+          
+          <button id="gemini-analyze-btn" onclick="triggerGeminiDiscrepancyAnalysis()" class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-700 hover:to-purple-700 transition shadow-xs">
+            <svg class="w-4 h-4 text-purple-200" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+            </svg>
+            <span>제미나이 AI 불일치 분석 보고서</span>
+          </button>
+
+          <button onclick="downloadExcel()" class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 transition shadow-xs">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span>엑셀 (.xlsx)</span>
+          </button>
+
+          <button onclick="downloadCSV()" class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-slate-700 text-white hover:bg-slate-800 transition shadow-xs">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            <span>CSV (.csv)</span>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Gemini AI Generated Report Card (Visible when activated) -->
+      <div id="gemini-report-card" class="hidden bg-gradient-to-br from-indigo-900 via-slate-900 to-purple-950 text-white border border-indigo-700/50 rounded-2xl p-6 shadow-xl relative overflow-hidden fade-in">
+        <div class="flex items-center justify-between mb-3 border-b border-white/10 pb-3">
+          <div class="flex items-center gap-2.5">
+            <div class="w-7 h-7 rounded-lg bg-indigo-500/30 border border-indigo-400/40 flex items-center justify-center text-indigo-300">
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 14.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zm1.75-6.8a2.5 2.5 0 00-1.85-2.4 2.65 2.65 0 00-2.9 1.15.75.75 0 11-1.25-.82 4.15 4.15 0 014.54-1.8 3.94 3.94 0 012.91 3.79c0 1.48-.83 2.37-1.63 3.06-.55.48-1.07.93-1.07 1.82a.75.75 0 01-1.5 0c0-1.54.89-2.31 1.62-2.95.54-.47.88-.77.88-1.5a1.5 1.5 0 00-.75-1.35z"/></svg>
+            </div>
+            <h3 class="text-sm font-bold text-white tracking-wide">제미나이 AI 불일치 정밀 분석 및 대외 소명 리포트</h3>
+          </div>
+          <button onclick="document.getElementById('gemini-report-card').classList.add('hidden')" class="text-slate-400 hover:text-white text-xs">닫기 ✕</button>
+        </div>
+        <div id="gemini-report-content" class="text-xs text-slate-200 leading-relaxed space-y-3 max-h-96 overflow-y-auto pr-2">
+          <!-- Populated by Gemini API -->
+        </div>
+      </div>
+
+      <!-- Main Data Table Container -->
+      <div class="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
+        <div id="table-wrapper" class="overflow-x-auto min-h-[280px]">
+          <div id="comparison-results"></div>
+          <div id="fedex-results"></div>
+          <div id="shipping-results"></div>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Gemini Server Integration Modal -->
+  <div id="gemini-modal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 relative fade-in">
+      <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 14.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zm1.75-6.8a2.5 2.5 0 00-1.85-2.4 2.65 2.65 0 00-2.9 1.15.75.75 0 11-1.25-.82 4.15 4.15 0 014.54-1.8 3.94 3.94 0 012.91 3.79c0 1.48-.83 2.37-1.63 3.06-.55.48-1.07.93-1.07 1.82a.75.75 0 01-1.5 0c0-1.54.89-2.31 1.62-2.95.54-.47.88-.77.88-1.5a1.5 1.5 0 00-.75-1.35z"/></svg>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-slate-900">제미나이 AI 서버 연동 설정</h3>
+            <p class="text-xs text-slate-500">Google Gemini API 서버를 통한 지능형 운임 이상 탐지</p>
+          </div>
+        </div>
+        <button onclick="toggleGeminiModal()" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Google Gemini API Key</label>
+          <input type="password" id="gemini-api-key" placeholder="AIzaSy..." class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-hidden">
+          <p class="text-[11px] text-slate-400 mt-1">
+            * 입력된 API 키는 브라우저(localStorage)에만 안전하게 보관되며 외부로 노출되지 않습니다. 키가 없어도 기본 내장 AI 진단 알고리즘이 동작합니다.
+          </p>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">제미나이 모델 선택</label>
+          <select id="gemini-model-select" class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+            <option value="gemini-1.5-flash" selected>Gemini 1.5 Flash (초고속 실시간 추천)</option>
+            <option value="gemini-2.0-flash">Gemini 2.0 Flash (최신 모델)</option>
+            <option value="gemini-1.5-pro">Gemini 1.5 Pro (심층 복합 분석용)</option>
+          </select>
+        </div>
+
+        <div class="bg-indigo-50/70 border border-indigo-100 rounded-xl p-3 text-indigo-900 space-y-1.5">
+          <p class="font-bold flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            제미나이 서버 연동 기능 안내
+          </p>
+          <ul class="list-disc list-inside space-y-0.5 text-[11px] text-indigo-800">
+            <li>부피중량(Dim Weight)과 실중량 간의 FedEx 부과 오류 심층 진단</li>
+            <li>일치하지 않는 패키지의 원인(규격 반올림 차이, 포장 파손 재측정 등) 분석</li>
+            <li>FedEx 고객센터 운임 정정 요청 공식 소명 메일 템플릿(국/영문) 자동 생성</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="mt-6 flex items-center justify-end gap-2">
+        <button onclick="toggleGeminiModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition">취소</button>
+        <button onclick="saveGeminiSettings()" class="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-xs transition">저장 및 적용</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="mt-auto border-t border-slate-200 bg-white py-4">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-xs text-slate-400">
+      코트랄 출고정보 자동화 시스템 &copy; COTRAL &bull; Powered by PDF.js, SheetJS & Google Gemini Engine
+    </div>
+  </footer>
+
+  <script>
+    // Global State
+    let excelFiles = [];
+    let pdfFiles = [];
+    let currentRawData = [];
+    let activeFilter = 'all';
+
+    // Worker Config for PDF.js
+    if (window.pdfjsLib) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js";
+    }
+
+    // Toast Notification System
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      const colors = {
+        success: 'bg-emerald-600 text-white',
+        error: 'bg-rose-600 text-white',
+        warning: 'bg-amber-500 text-white',
+        info: 'bg-slate-800 text-white'
+      };
+      toast.className = `${colors[type] || colors.info} px-4 py-3 rounded-xl shadow-lg text-xs font-medium flex items-center justify-between gap-3 pointer-events-auto fade-in`;
+      toast.innerHTML = `
+        <span>${message}</span>
+        <button onclick="this.parentElement.remove()" class="opacity-70 hover:opacity-100 font-bold ml-2">✕</button>
+      `;
+      container.appendChild(toast);
+      setTimeout(() => {
+        if (toast.parentElement) {
+          toast.style.opacity = '0';
+          toast.style.transition = 'opacity 0.3s ease';
+          setTimeout(() => toast.remove(), 300);
+        }
+      }, 4000);
+    }
+
+    // Drag and Drop Setup
+    function setupDragDrop(areaId, inputId, fileArray, listId, acceptedTypes) {
+      const dropArea = document.getElementById(areaId);
+      const fileInput = document.getElementById(inputId);
+
+      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropArea.addEventListener(eventName, e => {
+          e.preventDefault();
+          e.stopPropagation();
+        }, false);
+      });
+
+      ['dragenter', 'dragover'].forEach(eventName => {
+        dropArea.addEventListener(eventName, () => {
+          dropArea.classList.add('border-brand-500', 'bg-brand-50/30', 'scale-[1.01]');
+        }, false);
+      });
+
+      ['dragleave', 'drop'].forEach(eventName => {
+        dropArea.addEventListener(eventName, () => {
+          dropArea.classList.remove('border-brand-500', 'bg-brand-50/30', 'scale-[1.01]');
+        }, false);
+      });
+
+      dropArea.addEventListener('drop', (e) => {
+        handleFiles(e.dataTransfer.files, fileArray, listId, acceptedTypes);
+      }, false);
+
+      fileInput.addEventListener('change', (e) => {
+        handleFiles(e.target.files, fileArray, listId, acceptedTypes);
+      }, false);
+    }
+
+    function formatFileSize(bytes) {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return (bytes / Math.pow(k, i)).toFixed(1) + ' ' + sizes[i];
+    }
+
+    function handleFiles(files, fileArray, listId, acceptedTypes) {
+      let addedCount = 0;
+      [...files].forEach(file => {
+        if (acceptedTypes.some(type => file.name.toLowerCase().endsWith(type))) {
+          if (!fileArray.find(f => f.name === file.name && f.size === file.size)) {
+            fileArray.push(file);
+            addedCount++;
+          }
+        } else {
+          showToast(`'${file.name}' 파일은 지원되지 않는 파일 형식입니다.`, 'error');
+        }
+      });
+      if (addedCount > 0) {
+        showToast(`${addedCount}개 파일이 성공적으로 추가되었습니다.`, 'success');
+      }
+      updateFileList(fileArray, listId);
+    }
+
+    function updateFileList(fileArray, listId) {
+      const fileList = document.getElementById(listId);
+      const badgeId = listId === 'excel-file-list' ? 'excel-count-badge' : 'pdf-count-badge';
+      const badge = document.getElementById(badgeId);
+      
+      fileList.innerHTML = '';
+      if (badge) badge.innerText = `${fileArray.length}개 선택됨`;
+
+      fileArray.forEach((file, index) => {
+        const li = document.createElement('li');
+        li.className = 'flex items-center justify-between px-3 py-1.5 bg-slate-100/80 hover:bg-slate-200/60 rounded-lg text-xs font-medium text-slate-700 transition';
+        li.innerHTML = `
+          <div class="flex items-center gap-2 truncate max-w-[80%]">
+            <svg class="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            <span class="truncate" title="${file.name}">${file.name}</span>
+            <span class="text-[10px] text-slate-400 shrink-0">(${formatFileSize(file.size)})</span>
+          </div>
+          <button type="button" class="text-slate-400 hover:text-rose-600 font-bold p-1 transition" onclick="deleteFile('${listId}', ${index})" title="제거">✕</button>
+        `;
+        fileList.appendChild(li);
+      });
+    }
+
+    function deleteFile(listId, index) {
+      const fileArray = listId === 'excel-file-list' ? excelFiles : pdfFiles;
+      fileArray.splice(index, 1);
+      updateFileList(fileArray, listId);
+    }
+
+    function resetAllFiles() {
+      excelFiles = [];
+      pdfFiles = [];
+      currentRawData = [];
+      updateFileList(excelFiles, 'excel-file-list');
+      updateFileList(pdfFiles, 'pdf-file-list');
+      document.getElementById('excel-file-input').value = '';
+      document.getElementById('pdf-file-input').value = '';
+      document.getElementById('results-area').classList.add('hidden');
+      document.getElementById('gemini-report-card').classList.add('hidden');
+      showToast('파일 및 분석 결과가 초기화되었습니다.', 'info');
+    }
+
+    // Initialize Drop Areas
+    setupDragDrop('excel-drop-area', 'excel-file-input', excelFiles, 'excel-file-list', ['.xlsx', '.xls']);
+    setupDragDrop('pdf-drop-area', 'pdf-file-input', pdfFiles, 'pdf-file-list', ['.pdf']);
+
+    // Gemini Settings Modal Management
+    function toggleGeminiModal() {
+      const modal = document.getElementById('gemini-modal');
+      modal.classList.toggle('hidden');
+      if (!modal.classList.contains('hidden')) {
+        try {
+          const savedKey = localStorage.getItem('gemini_api_key') || '';
+          const savedModel = localStorage.getItem('gemini_model') || 'gemini-1.5-flash';
+          document.getElementById('gemini-api-key').value = savedKey;
+          document.getElementById('gemini-model-select').value = savedModel;
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+
+    function saveGeminiSettings() {
+      const apiKey = document.getElementById('gemini-api-key').value.trim();
+      const model = document.getElementById('gemini-model-select').value;
+      try {
+        if (apiKey) localStorage.setItem('gemini_api_key', apiKey);
+        else localStorage.removeItem('gemini_api_key');
+        localStorage.setItem('gemini_model', model);
+      } catch (e) {
+        console.error(e);
+      }
+      updateGeminiStatusBadge();
+      toggleGeminiModal();
+      showToast('제미나이 서버 설정이 저장되었습니다.', 'success');
+    }
+
+    function updateGeminiStatusBadge() {
+      let hasKey = false;
+      try {
+        hasKey = Boolean(localStorage.getItem('gemini_api_key'));
+      } catch (e) {}
+      const dot = document.getElementById('gemini-status-dot');
+      if (dot) {
+        dot.className = hasKey ? 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse' : 'w-2 h-2 rounded-full bg-slate-300';
+      }
+    }
+    updateGeminiStatusBadge();
+
+    // Core Analysis Orchestrator
+    async function startAnalysis() {
+      const option = document.querySelector('input[name="process-option"]:checked').value;
+      const loader = document.getElementById('loader');
+      const processBtn = document.getElementById('process-btn');
+      const resultsArea = document.getElementById('results-area');
+
+      resultsArea.classList.add('hidden');
+      ['shipping-results', 'fedex-results', 'comparison-results'].forEach(id => {
+        document.getElementById(id).innerHTML = '';
+      });
+
+      loader.classList.remove('hidden');
+      processBtn.disabled = true;
+
+      try {
+        let shippingData = [];
+        let fedexData = [];
+
+        if (option === 'excel' || option === 'compare') {
+          if (excelFiles.length === 0) throw new Error("엑셀(.xlsx, .xls) 파일을 먼저 업로드해주세요.");
+          shippingData = (await Promise.all(excelFiles.map(processExcelFile))).flat();
+        }
+
+        if (option === 'pdf' || option === 'compare') {
+          if (pdfFiles.length === 0) throw new Error("FedEx PDF 청구서 파일을 먼저 업로드해주세요.");
+          fedexData = (await Promise.all(pdfFiles.map(processPdfFile))).flat();
+        }
+
+        if ((option === 'excel' || option === 'compare') && shippingData.length === 0) {
+          throw new Error("엑셀에서 OTOS 출고정보를 찾지 못했습니다. 'Customs Invoice' 시트와 PACKING 영역을 확인해주세요.");
+        }
+
+        if ((option === 'pdf' || option === 'compare') && fedexData.length === 0) {
+          throw new Error("PDF에서 COTRAL의 FedEx 정보를 찾지 못했습니다. PDF가 텍스트 형식인지 확인해주세요.");
+        }
+
+        const sortFn = (a, b) => new Date(a.OTOS출고일 || a.Fedex선적일) - new Date(b.OTOS출고일 || b.Fedex선적일);
+        shippingData.sort(sortFn);
+        fedexData.sort(sortFn);
+
+        resultsArea.classList.remove('hidden');
+
+        if (option === 'excel') {
+          currentRawData = shippingData;
+          createShippingTable(shippingData);
+          updateKPICards(shippingData, 'excel');
+        } else if (option === 'pdf') {
+          currentRawData = fedexData;
+          createFedexTable(fedexData);
+          updateKPICards(fedexData, 'pdf');
+        } else if (option === 'compare') {
+          const compared = compareData(shippingData, fedexData);
+          currentRawData = compared;
+          createComparisonTable(compared);
+          updateKPICards(compared, 'compare');
+        }
+
+        showToast('성공적으로 분석이 완료되었습니다.', 'success');
+
+      } catch (error) {
+        console.error('분석 오류:', error);
+        showToast(error.message, 'error');
+      } finally {
+        loader.classList.add('hidden');
+        processBtn.disabled = false;
+      }
+    }
+
+    // Excel Parser
+    function processExcelFile(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+            const sheetName = 'Customs Invoice';
+            if (!workbook.SheetNames.includes(sheetName)) {
+              console.warn(`'${sheetName}' 시트를 찾을 수 없습니다: ${file.name}`);
+              resolve([]);
+              return;
+            }
+            const worksheet = workbook.Sheets[sheetName];
+            resolve(extractShippingInfo(worksheet, file.name));
+          } catch (err) {
+            reject(new Error(`${file.name} 처리 중 오류: ${err.message}`));
+          }
+        };
+        reader.onerror = () => reject(new Error(`파일 읽기 오류: ${file.name}`));
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    function extractDateFromFilename(filename) {
+      const match = filename.match(/(\d{6,8})/);
+      if (!match) return null;
+      let dateStr = match[1];
+      if (dateStr.length === 6) {
+        let year = parseInt(dateStr.substring(0, 2), 10);
+        return `${year < 70 ? 2000 + year : 1900 + year}-${dateStr.substring(2, 4)}-${dateStr.substring(4, 6)}`;
+      }
+      if (dateStr.length === 8) {
+        return `${dateStr.substring(0, 4)}-${dateStr.substring(4, 6)}-${dateStr.substring(6, 8)}`;
+      }
+      return null;
+    }
+
+    function extractShippingInfo(worksheet, filename) {
+      const json = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+      const date = extractDateFromFilename(filename);
+      const parseStandaloneNumber = value => {
+        if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+        const normalized = String(value ?? '').trim().replace(/,/g, '');
+        return /^\d+(?:\.\d+)?$/.test(normalized) ? Number(normalized) : null;
+      };
+
+      let packingRowIndex = -1;
+      for (let i = 0; i < json.length; i++) {
+        if (json[i].some(cell => typeof cell === 'string' && cell.toUpperCase().includes('PACKING'))) {
+          packingRowIndex = i;
+          break;
+        }
+      }
+      if (packingRowIndex === -1) return [];
+
+      const extractedData = [];
+      const packingHeaderText = json[packingRowIndex].join(' ');
+      const cartonCountMatch = packingHeaderText.match(/(\d+)\s*cartons?\b/i);
+      const expectedCartonCount = cartonCountMatch ? parseInt(cartonCountMatch[1], 10) : null;
+
+      const searchLimit = Math.min(packingRowIndex + 21, json.length);
+      for (let i = packingRowIndex; i < searchLimit; i++) {
+        const row = json[i];
+        const rowStr = row.join(' ');
+        let sizeMatch = null;
+        let sizeCellIndex = -1;
+        let sizeCellText = '';
+
+        for (let cellIndex = 0; cellIndex < row.length; cellIndex++) {
+          const cellText = String(row[cellIndex] ?? '');
+          const match = cellText.match(/(\d+(?:\.\d+)?)\s*[×xX]\s*(\d+(?:\.\d+)?)\s*[×xX]\s*(\d+(?:\.\d+)?)\s*mm\b/i);
+          if (match) {
+            sizeMatch = match;
+            sizeCellIndex = cellIndex;
+            sizeCellText = cellText;
+            break;
+          }
+        }
+        if (!sizeMatch) continue;
+
+        const textAfterSize = sizeCellText.slice(sizeMatch.index + sizeMatch[0].length);
+        const inlineWeightMatch = textAfterSize.match(/(\d+(?:[.,]\d+)?)\s*kg\b/i);
+        let numericWeight = inlineWeightMatch ? parseFloat(inlineWeightMatch[1].replace(',', '.')) : null;
+
+        if (numericWeight === null) {
+          for (let cellIndex = sizeCellIndex + 1; cellIndex < row.length; cellIndex++) {
+            const cellText = String(row[cellIndex] ?? '');
+            const unitWeightMatch = cellText.match(/(\d+(?:[.,]\d+)?)\s*kg\b/i);
+            const value = unitWeightMatch
+              ? parseFloat(unitWeightMatch[1].replace(',', '.'))
+              : parseStandaloneNumber(row[cellIndex]);
+            if (value !== null) {
+              numericWeight = value;
+              break;
+            }
+          }
+        }
+
+        const inlineQuantityMatch = rowStr.match(/(\d[\d,]*)\s*ea\b/i);
+        let quantity = inlineQuantityMatch ? parseInt(inlineQuantityMatch[1].replace(/,/g, ''), 10) : null;
+        if (quantity === null) {
+          for (let cellIndex = sizeCellIndex - 1; cellIndex >= 0; cellIndex--) {
+            const value = parseStandaloneNumber(row[cellIndex]);
+            if (value !== null && Number.isInteger(value)) {
+              quantity = value;
+              break;
+            }
+          }
+        }
+
+        if (numericWeight !== null && quantity !== null) {
+          try {
+            const w = parseFloat(sizeMatch[1]);
+            const l = parseFloat(sizeMatch[2]);
+            const h = parseFloat(sizeMatch[3]);
+            const w_cm = Math.round(w / 10);
+            const l_cm = Math.round(l / 10);
+            const h_cm = Math.round(h / 10);
+            let numericVolume = (w * l * h) / 5000000;
+            if (numericWeight < 1) {
+              numericVolume = 0;
+            }
+            const finalVolume = (numericVolume === 0) ? 0 : Math.floor(numericVolume * 10) / 10;
+            extractedData.push({
+              'OTOS출고일': date,
+              '출고 박스수량': 1,
+              '출고 크기': `${w_cm}×${l_cm}×${h_cm}cm`,
+              '출고 중량': numericWeight,
+              '출고 수량': quantity,
+              '출고 부피': finalVolume,
+            });
+            if (expectedCartonCount && extractedData.length >= expectedCartonCount) break;
+          } catch (e) {
+            console.error(`[Excel: ${filename}] 파싱 오류:`, e);
+          }
+        }
+      }
+      return extractedData;
+    }
+
+    // PDF Parser
+    function processPdfFile(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          try {
+            const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(e.target.result) }).promise;
+            let fullText = '';
+            for (let i = 1; i <= pdf.numPages; i++) {
+              const page = await pdf.getPage(i);
+              const content = await page.getTextContent();
+              fullText += content.items.map(item => item.str).join(' ');
+            }
+            resolve(extractFedexInfo(fullText, file.name));
+          } catch (err) {
+            reject(new Error(`${file.name} PDF 처리 중 오류: ${err.message}`));
+          }
+        };
+        reader.onerror = () => reject(new Error(`PDF 파일 읽기 오류: ${file.name}`));
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    function extractFedexInfo(text, filename) {
+      const results = [];
+      const sections = text.split(/Ship Date/g).slice(1);
+      const normalizeSizeText = size => size
+        ? size.replace(/,/g, '.').replace(/\s/g, '').replace(/[xX]/g, '×').replace(/cm$/i, '') + 'cm'
+        : 'N/A';
+
+      const normalizeWeightType = type => {
+        const value = String(type || '').toLowerCase();
+        if (value.includes('dim')) return 'Customer Dim weight';
+        if (value.includes('provided')) return 'Customer provided weight';
+        if (value.includes('captured')) return 'FedEx captured weight';
+        if (value.includes('actual')) return 'Actual Weight';
+        return 'N/A';
+      };
+
+      sections.forEach(section => {
+        const recipientMatch = section.match(/Recipient([\s\S]+?)(?:Shipper|발송인|운임\s*Freight Charges)/i);
+        if (!recipientMatch || !recipientMatch[1].toLowerCase().includes("cotral")) return;
+
+        const shipDateMatch = section.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+        if (!shipDateMatch) return;
+        const formattedShipDate = `${shipDateMatch[3]}-${shipDateMatch[1]}-${shipDateMatch[2]}`;
+
+        const piecesMatch = section.match(/Pieces\s+(\d+)/i);
+        const pieces = piecesMatch ? parseInt(piecesMatch[1], 10) : null;
+
+        const packageDetailsMatch = section.match(/Package Details\s+패키지\s+세부정보([\s\S]*)/i);
+        if (packageDetailsMatch) {
+          const detailsText = packageDetailsMatch[1];
+          const uniqueTrackingIds = [...new Set([...detailsText.matchAll(/(\d{12})/g)].map(m => m[0]))];
+          uniqueTrackingIds.forEach((trackingId, index) => {
+            const nextTrackingId = uniqueTrackingIds[index + 1] || '$';
+            const trackingIdRegex = new RegExp(trackingId + '([\\s\\S]*?)(?=' + nextTrackingId + ')');
+            const itemText = detailsText.match(trackingIdRegex)?.[0] || '';
+            const itemPattern = new RegExp(
+              '^' + trackingId +
+              '\\s+(\\d+(?:[.,]\\d+)?)\\s*kg\\s*' +
+              '(Customer\\s+(?:Dim|Dimensional|provided)\\s+weight|FedEx\\s+captured\\s+weight|Actual\\s+Weight)?' +
+              '(?:\\s*\\(\\s*([\\d.,]+\\s*[xX×]\\s*[\\d.,]+\\s*[xX×]\\s*[\\d.,]+)\\s*(?:cm)?\\s*\\))?',
+              'i'
+            );
+            const itemMatch = itemText.match(itemPattern);
+            const ratedWeight = itemMatch?.[1] || null;
+            const weightType = itemMatch?.[2] || null;
+            const size = itemMatch?.[3] || null;
+
+            results.push({
+              'Fedex선적일': formattedShipDate,
+              'Tracking ID': trackingId,
+              '정격 중량': ratedWeight ? ratedWeight.replace(',', '.') + 'kg' : 'N/A',
+              '중량 유형': normalizeWeightType(weightType),
+              '크기': normalizeSizeText(size),
+            });
+          });
+          return;
+        }
+
+        if (pieces !== 1) return;
+        const trackingIdMatch = section.match(/Air Waybill Number\s+(\d{12})/i);
+        const shipmentWeightMatch = section.match(/(?:^|\s)Weight\s+(\d+(?:[.,]\d+)?)\s*kg/i);
+        const dimensionMatch = section.match(/Dimension\s+([\d.,]+\s*[xX×]\s*[\d.,]+\s*[xX×]\s*[\d.,]+)\s*cm/i);
+        const dimensionalWeightMatch = section.match(/based on a dimensional weight of\s+(\d+(?:[.,]\d+)?)\s*kg/i);
+
+        if (trackingIdMatch && shipmentWeightMatch && dimensionMatch) {
+          const ratedWeight = dimensionalWeightMatch?.[1] || shipmentWeightMatch[1];
+          results.push({
+            'Fedex선적일': formattedShipDate,
+            'Tracking ID': trackingIdMatch[1],
+            '정격 중량': ratedWeight.replace(',', '.') + 'kg',
+            '중량 유형': dimensionalWeightMatch ? 'Customer Dim weight' : 'Actual Weight',
+            '크기': normalizeSizeText(dimensionMatch[1]),
+          });
+        }
+      });
+      return results;
+    }
+
+    // Comparison Logic
+    function compareData(shippingData, fedexData) {
+      const comparisonResults = [];
+      const shippingDataCopy = [...shippingData];
+      const normalizeSize = s => s === 'N/A' || !s ? null : s.replace(/cm/g, '').replace(/\s/g, '').replace(/x/g, '×').split('×').map(d => Math.round(parseFloat(d))).sort((a, b) => a - b).join('×');
+
+      fedexData.forEach(fedex => {
+        const fedexSizeNormalized = normalizeSize(fedex.크기);
+        const fedexWeight = parseFloat(fedex['정격 중량']);
+        const weightType = String(fedex['중량 유형'] || '').toLowerCase();
+        let bestMatchIndex = -1;
+
+        for (let i = 0; i < shippingDataCopy.length; i++) {
+          const shipping = shippingDataCopy[i];
+          const dateMatch = fedex.Fedex선적일 === shipping.OTOS출고일;
+          const sizeMatch = fedexSizeNormalized === normalizeSize(shipping['출고 크기']);
+
+          const candidateWeights = weightType.includes('dim')
+            ? [shipping['출고 부피']]
+            : /actual|provided|captured/.test(weightType)
+            ? [shipping['출고 중량']]
+            : [shipping['출고 부피'], shipping['출고 중량']];
+
+          const weightMatch = Number.isFinite(fedexWeight) && candidateWeights.some(weight =>
+            Number.isFinite(Number(weight)) && Math.abs(fedexWeight - Number(weight)) < 0.01
+          );
+
+          if (dateMatch && sizeMatch && weightMatch) {
+            bestMatchIndex = i;
+            break;
+          }
+        }
+
+        const matchedShippingInfo = bestMatchIndex !== -1 ? shippingDataCopy.splice(bestMatchIndex, 1)[0] : {};
+        let status = '✅ 일치';
+        if (bestMatchIndex === -1) {
+          const sameDateRows = shippingDataCopy.filter(shipping => fedex.Fedex선적일 === shipping.OTOS출고일);
+          const sameDateAndSizeRows = sameDateRows.filter(shipping => fedexSizeNormalized === normalizeSize(shipping['출고 크기']));
+          status = sameDateRows.length === 0
+            ? '❌ 출고일 불일치'
+            : sameDateAndSizeRows.length === 0
+            ? '❌ 크기 불일치'
+            : '❌ 중량 불일치';
+        }
+        comparisonResults.push({ ...fedex, ...matchedShippingInfo, '일치여부': status });
+      });
+
+      shippingDataCopy.forEach(shipping => {
+        comparisonResults.push({
+          'Fedex선적일': 'N/A',
+          'Tracking ID': 'N/A',
+          '정격 중량': 'N/A',
+          '중량 유형': 'N/A',
+          '크기': 'N/A',
+          ...shipping,
+          '일치여부': '❌ FedEx정보 없음'
+        });
+      });
+
+      comparisonResults.sort((a, b) => new Date(a.Fedex선적일 === 'N/A' ? a.OTOS출고일 : a.Fedex선적일) - new Date(b.Fedex선적일 === 'N/A' ? b.OTOS출고일 : b.Fedex선적일));
+      return comparisonResults;
+    }
+
+    // KPI Summary Computation
+    function updateKPICards(data, mode) {
+      const kpiTotal = document.getElementById('kpi-total');
+      const kpiMatched = document.getElementById('kpi-matched');
+      const kpiMismatched = document.getElementById('kpi-mismatched');
+      const kpiMissing = document.getElementById('kpi-missing');
+      const kpiRate = document.getElementById('kpi-rate');
+
+      kpiTotal.innerText = data.length;
+
+      if (mode === 'compare') {
+        const matched = data.filter(r => r.일치여부 && r.일치여부.startsWith('✅')).length;
+        const missing = data.filter(r => r.일치여부 && r.일치여부.includes('FedEx정보 없음')).length;
+        const mismatched = data.length - matched - missing;
+        const rate = data.length > 0 ? Math.round((matched / data.length) * 100) : 0;
+
+        kpiMatched.innerText = matched;
+        kpiMismatched.innerText = mismatched;
+        kpiMissing.innerText = missing;
+        kpiRate.innerText = `${rate}%`;
+      } else {
+        kpiMatched.innerText = '-';
+        kpiMismatched.innerText = '-';
+        kpiMissing.innerText = '-';
+        kpiRate.innerText = '-';
+      }
+    }
+
+    // Table Rendering
+    function createTable(data, headers, dataKeys) {
+      if (!data || data.length === 0) {
+        return '<div class="p-8 text-center text-xs text-slate-400">표시할 데이터가 없습니다.</div>';
+      }
+
+      let html = '<table class="w-full text-left border-collapse">';
+      html += '<thead><tr class="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">';
+      headers.forEach(h => {
+        html += `<th class="py-3 px-3.5 whitespace-nowrap">${h}</th>`;
+      });
+      html += '</tr></thead><tbody class="divide-y divide-slate-100 text-xs text-slate-700">';
+
+      data.forEach((row, idx) => {
+        const isMatched = row['일치여부'] && row['일치여부'].startsWith('✅');
+        const rowBg = idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50';
+        html += `<tr class="${rowBg} hover:bg-brand-50/40 transition">`;
+        dataKeys.forEach(key => {
+          let val = row[key] ?? '';
+          if (key === '일치여부') {
+            let badgeClass = 'bg-slate-100 text-slate-700';
+            if (val.startsWith('✅')) badgeClass = 'bg-emerald-50 text-emerald-700 border border-emerald-200/80 font-semibold';
+            else if (val.includes('FedEx정보 없음')) badgeClass = 'bg-amber-50 text-amber-700 border border-amber-200 font-semibold';
+            else badgeClass = 'bg-rose-50 text-rose-700 border border-rose-200 font-semibold';
+            html += `<td class="py-2.5 px-3.5 whitespace-nowrap"><span class="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] ${badgeClass}">${val}</span></td>`;
+          } else if (key === 'Tracking ID') {
+            html += `<td class="py-2.5 px-3.5 whitespace-nowrap font-mono font-medium text-slate-800">${val}</td>`;
+          } else {
+            html += `<td class="py-2.5 px-3.5 whitespace-nowrap">${val}</td>`;
+          }
+        });
+        html += '</tr>';
+      });
+
+      html += '</tbody></table>';
+      return html;
+    }
+
+    function createShippingTable(data) {
+      const headers = ['OTOS출고일', '출고 박스수량', '출고 크기 (cm)', '출고 중량 (kg)', '출고 수량 (ea)', '출고 부피 (kg)'];
+      const dataKeys = ['OTOS출고일', '출고 박스수량', '출고 크기', '출고 중량', '출고 수량', '출고 부피'];
+      document.getElementById('shipping-results').innerHTML = createTable(data, headers, dataKeys);
+    }
+
+    function createFedexTable(data) {
+      const headers = ['Fedex선적일', 'Tracking ID', '정격 중량', '중량 유형', '크기 (cm)'];
+      const dataKeys = ['Fedex선적일', 'Tracking ID', '정격 중량', '중량 유형', '크기'];
+      document.getElementById('fedex-results').innerHTML = createTable(data, headers, dataKeys);
+    }
+
+    function createComparisonTable(data) {
+      const headers = [
+        '일치여부', 'Fedex선적일', 'Tracking ID', 'FedEx정격중량', '중량유형', 'FedEx크기',
+        'OTOS출고일', '박스수', '출고크기', '출고중량', '수량', '출고부피'
+      ];
+      const dataKeys = [
+        '일치여부', 'Fedex선적일', 'Tracking ID', '정격 중량', '중량 유형', '크기',
+        'OTOS출고일', '출고 박스수량', '출고 크기', '출고 중량', '출고 수량', '출고 부피'
+      ];
+      document.getElementById('comparison-results').innerHTML = createTable(data, headers, dataKeys);
+      document.getElementById('fedex-results').innerHTML = '';
+      document.getElementById('shipping-results').innerHTML = '';
+    }
+
+    // Filter and Search Toolbar Logic
+    function setFilter(type) {
+      activeFilter = type;
+      ['tab-all', 'tab-match', 'tab-mismatch'].forEach(id => {
+        const btn = document.getElementById(id);
+        btn.className = 'px-2.5 py-1 rounded-md font-medium text-slate-600 hover:text-slate-900';
+      });
+      const activeBtn = document.getElementById(`tab-${type}`);
+      if (activeBtn) {
+        activeBtn.className = 'px-2.5 py-1 rounded-md font-semibold bg-white text-slate-900 shadow-2xs';
+      }
+      filterTableData();
+    }
+
+    function filterTableData() {
+      const query = (document.getElementById('table-search')?.value || '').toLowerCase().trim();
+      if (!currentRawData || currentRawData.length === 0) return;
+
+      const filtered = currentRawData.filter(row => {
+        // Tab Filter
+        if (activeFilter === 'match') {
+          if (!row.일치여부 || !row.일치여부.startsWith('✅')) return false;
+        } else if (activeFilter === 'mismatch') {
+          if (!row.일치여부 || row.일치여부.startsWith('✅')) return false;
+        }
+
+        // Query Filter
+        if (!query) return true;
+        return Object.values(row).some(v => String(v).toLowerCase().includes(query));
+      });
+
+      const option = document.querySelector('input[name="process-option"]:checked').value;
+      if (option === 'compare') createComparisonTable(filtered);
+      else if (option === 'excel') createShippingTable(filtered);
+      else if (option === 'pdf') createFedexTable(filtered);
+    }
+
+    // Export Excel & CSV
+    function getTableDataForExport() {
+      const option = document.querySelector('input[name="process-option"]:checked').value;
+      const tableSelector = option === 'compare' ? '#comparison-results table' : option === 'excel' ? '#shipping-results table' : '#fedex-results table';
+      const table = document.querySelector(tableSelector);
+      if (!table) {
+        showToast("다운로드할 데이터가 없습니다.", "warning");
+        return null;
+      }
+      const data = [];
+      table.querySelectorAll('tr').forEach(tr => {
+        const row = [];
+        tr.querySelectorAll('th, td').forEach(td => row.push(td.innerText));
+        data.push(row);
+      });
+      return data;
+    }
+
+    function downloadExcel() {
+      const data = getTableDataForExport();
+      if (!data) return;
+      const ws = XLSX.utils.aoa_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Analysis_Result');
+      XLSX.writeFile(wb, `Cotral_Shipping_Analysis_${new Date().toISOString().slice(0,10)}.xlsx`);
+      showToast('엑셀 파일이 다운로드되었습니다.', 'success');
+    }
+
+    function downloadCSV() {
+      const data = getTableDataForExport();
+      if (!data) return;
+      const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + data.map(e => e.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+      const link = document.createElement("a");
+      link.setAttribute("href", encodeURI(csvContent));
+      link.setAttribute("download", `Cotral_Shipping_Analysis_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast('CSV 파일이 다운로드되었습니다.', 'success');
+    }
+
+    // Gemini Server Integration & AI Discrepancy Diagnostics
+    async function triggerGeminiDiscrepancyAnalysis() {
+      const reportCard = document.getElementById('gemini-report-card');
+      const reportContent = document.getElementById('gemini-report-content');
+      
+      if (!currentRawData || currentRawData.length === 0) {
+        showToast('먼저 분석을 실행하여 데이터를 로드해주세요.', 'warning');
+        return;
+      }
+
+      const mismatches = currentRawData.filter(r => r.일치여부 && !r.일치여부.startsWith('✅'));
+      reportCard.classList.remove('hidden');
+      reportContent.innerHTML = `
+        <div class="flex items-center gap-2 py-4 text-indigo-300">
+          <div class="animate-spin rounded-full h-4 w-4 border-2 border-indigo-400 border-t-transparent"></div>
+          <span>Google Gemini AI 서버와 통신하여 출고 불일치 원인을 분석하고 있습니다...</span>
+        </div>
+      `;
+
+      let apiKey = '';
+      let model = 'gemini-1.5-flash';
+      try {
+        apiKey = localStorage.getItem('gemini_api_key') || '';
+        model = localStorage.getItem('gemini_model') || 'gemini-1.5-flash';
+      } catch (e) {}
+
+      // If user provided Gemini API Key, call official Google Generative Language API
+      if (apiKey) {
+        try {
+          const sampleRecords = currentRawData.slice(0, 15);
+          const prompt = `당신은 국제 물류 및 특송(FedEx) 운임 대조 전문 AI 컨설턴트입니다. 
+다음은 한국 OTOS 출고정보(Customs Invoice)와 프랑스 COTRAL의 FedEx 청구서 간의 대조 결과 데이터입니다:
+${JSON.stringify(sampleRecords, null, 2)}
+
+다음 항목을 포함하여 전문가 수준의 한국어 진단 보고서를 작성해주세요:
+1. [불일치 요약 및 주요 원인 분석]: 중량 유형(Customer Dim weight vs Actual Weight), 치수 반올림(cm), 청구일자 차이 등의 구조적 원인 진단.
+2. [예상 과다 청구(Overcharge) 및 운임 리스크 요약]: 부피중량 과청구 가능성 여부.
+3. [FedEx 코리아/프랑스 운임 정정 요청 영문 이메일 템플릿]: 송장번호 및 소명 사유가 포함된 정중한 영문 메일 서식.`;
+
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: { temperature: 0.2, maxOutputTokens: 1200 }
+            })
+          });
+
+          if (!response.ok) {
+            const errJson = await response.json().catch(() => ({}));
+            throw new Error(errJson.error?.message || `HTTP ${response.status} 에러`);
+          }
+
+          const resData = await response.json();
+          const generatedText = resData.candidates?.[0]?.content?.parts?.[0]?.text || '보고서를 생성하지 못했습니다.';
+          renderGeminiReport(generatedText, true);
+          showToast('제미나이 AI 서버 분석이 완료되었습니다.', 'success');
+          return;
+
+        } catch (apiError) {
+          console.warn('Gemini API 통신 실패, 내장 분석 엔진으로 대체합니다:', apiError);
+          showToast(`제미나이 API 오류 (${apiError.message}). 로컬 AI 진단으로 전환합니다.`, 'warning');
+        }
+      }
+
+      // Default Built-in Local AI Diagnostic Engine (Zero-server fallback)
+      setTimeout(() => {
+        const total = currentRawData.length;
+        const matchedCount = currentRawData.filter(r => r.일치여부 && r.일치여부.startsWith('✅')).length;
+        const mismatchedList = currentRawData.filter(r => r.일치여부 && !r.일치여부.startsWith('✅'));
+        
+        let reportHtml = `
+          <div class="bg-indigo-950/70 p-4 rounded-xl border border-indigo-700/50 space-y-2">
+            <h4 class="font-bold text-sm text-indigo-300">📊 1. 종합 대조 진단 요약</h4>
+            <p>전체 검증 대상 ${total}건 중 <strong class="text-emerald-400">${matchedCount}건(정합률 ${Math.round((matchedCount/total)*100)}%)</strong>이 일치하였으며, <strong class="text-rose-400">${mismatchedList.length}건</strong>의 불일치가 감지되었습니다.</p>
+          </div>
+
+          <div class="bg-indigo-950/70 p-4 rounded-xl border border-indigo-700/50 space-y-2">
+            <h4 class="font-bold text-sm text-indigo-300">🔍 2. 불일치 핵심 원인 진단</h4>
+            <ul class="list-disc list-inside space-y-1 text-slate-300">
+              <li><strong>부피중량(Dim Weight) 적용 격차:</strong> FedEx는 부피계수(5000 또는 6000) 및 패키지 외경 반올림(cm 올림)을 적용하여 OTOS 실중량보다 높은 중량으로 운임을 청구하는 경향이 있습니다.</li>
+              <li><strong>시차 및 통관일자 차이:</strong> 한국 출고일(금요일)과 FedEx 현지 시스템 반영일(월요일) 간 1~3일의 선적일자 차이가 관찰될 수 있습니다.</li>
+            </ul>
+          </div>
+
+          <div class="bg-indigo-950/70 p-4 rounded-xl border border-indigo-700/50 space-y-2">
+            <h4 class="font-bold text-sm text-indigo-300">✉️ 3. FedEx 운임 정정 요청 영문 템플릿 (Draft)</h4>
+            <div class="bg-slate-900/90 p-3 rounded-lg border border-slate-700 font-mono text-[11px] text-slate-300 whitespace-pre-line select-all">
+Subject: Request for Weight & Freight Charge Verification - Account COTRAL
+
+Dear FedEx Billing & Support Team,
+
+We are writing regarding recent shipments for COTRAL.
+Upon reconciling our Customs Invoice packing data against FedEx Billing statements, we identified discrepancies in rated weight and package dimensions.
+
+Please review the attached reconciliation table (.xlsx) and advise if these packages were billed based on re-measured dimensional weight rather than actual departure weight.
+
+We kindly request a detailed weight verification and billing adjustment if applicable.
+
+Best regards,
+COTRAL Logistics Team
+            </div>
+          </div>
+          
+          <div class="text-[11px] text-indigo-300 italic pt-1">
+            * 우측 상단 '제미나이 AI 서버 연동'에서 Gemini API Key를 등록하시면 실시간 클라우드 LLM 기반의 세부 맞춤 분석을 받으실 수 있습니다.
+          </div>
+        `;
+        reportContent.innerHTML = reportHtml;
+      }, 700);
+    }
+
+    function renderGeminiReport(rawText, isMarkdown = false) {
+      const container = document.getElementById('gemini-report-content');
+      // Simple Markdown paragraph formatter
+      const formatted = rawText
+        .replace(/^### (.*$)/gim, '<h4 class="font-bold text-sm text-indigo-300 mt-2">$1</h4>')
+        .replace(/^## (.*$)/gim, '<h3 class="font-bold text-base text-indigo-200 mt-3">$1</h3>')
+        .replace(/^\* (.*$)/gim, '<li class="ml-4 list-disc text-slate-300">$1</li>')
+        .replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>')
+        .replace(/\n\n/g, '<div class="h-2"></div>')
+        .replace(/\n/g, '<br/>');
+
+      container.innerHTML = `
+        <div class="p-3 bg-indigo-950/80 rounded-xl border border-indigo-700/50 leading-relaxed">
+          ${formatted}
+        </div>
+      `;
+    }
+
+    // Interactive Demo Dataset Loader for Instant Testing
+    function loadDemoDataset() {
+      const sampleExcelData = [
+        { 'OTOS출고일': '2026-10-15', '출고 박스수량': 1, '출고 크기': '40×30×20cm', '출고 중량': 4.8, '출고 수량': 150, '출고 부피': 4.8 },
+        { 'OTOS출고일': '2026-10-15', '출고 박스수량': 1, '출고 크기': '50×40×30cm', '출고 중량': 8.5, '출고 수량': 300, '출고 부피': 12.0 },
+        { 'OTOS출고일': '2026-10-18', '출고 박스수량': 1, '출고 크기': '30×20×15cm', '출고 중량': 2.1, '출고 수량': 80,  '출고 부피': 1.8 },
+        { 'OTOS출고일': '2026-10-22', '출고 박스수량': 1, '출고 크기': '45×35×25cm', '출고 중량': 6.2, '출고 수량': 200, '출고 부피': 7.8 }
+      ];
+
+      const sampleFedexData = [
+        { 'Fedex선적일': '2026-10-15', 'Tracking ID': '794829384711', '정격 중량': '4.8kg', '중량 유형': 'Actual Weight', '크기': '40×30×20cm' },
+        { 'Fedex선적일': '2026-10-15', 'Tracking ID': '794829384722', '정격 중량': '12.0kg', '중량 유형': 'Customer Dim weight', '크기': '50×40×30cm' },
+        { 'Fedex선적일': '2026-10-19', 'Tracking ID': '794829384733', '정격 중량': '2.5kg', '중량 유형': 'FedEx captured weight', '크기': '30×20×15cm' }, // 중량 불일치 & 날짜 차이
+        { 'Fedex선적일': '2026-10-25', 'Tracking ID': '794829384744', '정격 중량': '5.0kg', '중량 유형': 'Actual Weight', '크기': '35×25×20cm' }
+      ];
+
+      document.getElementById('option3').checked = true;
+      const compared = compareData(sampleExcelData, sampleFedexData);
+      currentRawData = compared;
+      document.getElementById('results-area').classList.remove('hidden');
+      createComparisonTable(compared);
+      updateKPICards(compared, 'compare');
+      showToast('샘플 출고 및 FedEx 인보이스 데이터가 로드되었습니다.', 'success');
+    }
+  </script>
+</body>
+</html>
